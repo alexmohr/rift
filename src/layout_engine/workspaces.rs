@@ -10,6 +10,8 @@ pub(crate) struct WorkspaceLayouts {
         (SpaceId, crate::model::VirtualWorkspaceId),
         SpaceLayoutInfo,
     >,
+    #[serde(skip)]
+    shared_workspaces: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -39,6 +41,20 @@ impl From<CGSize> for Size {
 }
 
 impl WorkspaceLayouts {
+    /// Returns the space key to use for workspace lookups.
+    /// In shared mode, all spaces map to SpaceId(0). In per-monitor mode, uses the actual space.
+    #[inline]
+    fn get_space_key(&self, space: SpaceId) -> SpaceId {
+        if self.shared_workspaces {
+            SpaceId::new(0)
+        } else {
+            space
+        }
+    }
+
+    pub(crate) fn set_shared_workspaces(&mut self, shared: bool) {
+        self.shared_workspaces = shared;
+    }
     pub(crate) fn ensure_active_for_space(
         &mut self,
         space: SpaceId,
@@ -46,9 +62,10 @@ impl WorkspaceLayouts {
         workspaces: impl IntoIterator<Item = crate::model::VirtualWorkspaceId>,
         tree: &mut impl LayoutSystem,
     ) {
+        let space_key = self.get_space_key(space);
         let size = Size::from(size);
         for workspace_id in workspaces {
-            let workspace_key = (space, workspace_id);
+            let workspace_key = (space_key, workspace_id);
             let (workspace_layout, mut unchanged) = match self.map.entry(workspace_key) {
                 crate::common::collections::hash_map::Entry::Vacant(entry) => (
                     entry.insert(SpaceLayoutInfo {
@@ -108,7 +125,8 @@ impl WorkspaceLayouts {
         space: SpaceId,
         workspace_id: crate::model::VirtualWorkspaceId,
     ) -> Option<LayoutId> {
-        self.map.get(&(space, workspace_id)).and_then(|l| l.active())
+        let space_key = self.get_space_key(space);
+        self.map.get(&(space_key, workspace_id)).and_then(|l| l.active())
     }
 
     pub(crate) fn mark_last_saved(
@@ -117,7 +135,8 @@ impl WorkspaceLayouts {
         workspace_id: crate::model::VirtualWorkspaceId,
         layout: LayoutId,
     ) {
-        if let Some(info) = self.map.get_mut(&(space, workspace_id)) {
+        let space_key = self.get_space_key(space);
+        if let Some(info) = self.map.get_mut(&(space_key, workspace_id)) {
             info.last_saved = Some(layout);
         }
     }
@@ -126,10 +145,11 @@ impl WorkspaceLayouts {
         &self,
         space: SpaceId,
     ) -> Vec<(crate::model::VirtualWorkspaceId, LayoutId)> {
+        let space_key = self.get_space_key(space);
         self.map
             .iter()
             .filter_map(|(&(sp, ws), info)| {
-                if sp == space {
+                if sp == space_key {
                     info.active().map(|l| (ws, l))
                 } else {
                     None

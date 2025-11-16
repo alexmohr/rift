@@ -81,6 +81,10 @@ pub struct VirtualWorkspaceSettings {
     pub default_workspace: usize,
     #[serde(default)]
     pub app_rules: Vec<AppWorkspaceRule>,
+    /// If true, workspaces are shared across all monitors.
+    /// If false (default), each monitor has its own set of workspaces.
+    #[serde(default = "no")]
+    pub shared_workspaces: bool,
 }
 
 // Allow specifying a workspace by numeric index or by name in the config.
@@ -138,6 +142,7 @@ impl Default for VirtualWorkspaceSettings {
             workspace_names: default_workspace_names(),
             default_workspace: 0,
             app_rules: Vec::new(),
+            shared_workspaces: false,
         }
     }
 }

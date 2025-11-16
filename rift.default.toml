@@ -193,11 +193,14 @@ drag_swap_fraction = 0.3
 # - preserve_focus_per_workspace: remember last focused window per workspace
 # - workspace_auto_back_and_forth: when enabled, if you try to switch to the same workspace
 #   that's already active, it will switch to the last workspace instead
+# - shared_workspaces: if true, all monitors share the same set of workspaces.
+#   If false (default), each monitor has its own independent set of workspaces.
 enabled = true
 default_workspace_count = 4
 auto_assign_windows = true
 preserve_focus_per_workspace = true
 workspace_auto_back_and_forth = false
+shared_workspaces = false
 
 # Default workspace to activate on startup (0-based index).
 # If omitted, defaults to 0 (first workspace). Must be less than default_workspace_count.

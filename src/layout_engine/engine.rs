@@ -119,6 +119,7 @@ impl LayoutEngine {
         settings: &crate::common::config::VirtualWorkspaceSettings,
     ) {
         self.virtual_workspace_manager.update_settings(settings);
+        self.workspace_layouts.set_shared_workspaces(settings.shared_workspaces);
     }
 
     fn active_floating_windows_flat(&self, space: SpaceId) -> Vec<WindowId> {
@@ -429,9 +430,13 @@ impl LayoutEngine {
             }
         };
 
+        // todo alexmohr: pass this flag when constructing the object
+        let mut workspace_layouts = WorkspaceLayouts::default();
+        workspace_layouts.set_shared_workspaces(virtual_workspace_config.shared_workspaces);
+
         LayoutEngine {
             tree,
-            workspace_layouts: WorkspaceLayouts::default(),
+            workspace_layouts,
             floating: FloatingManager::new(),
             focused_window: None,
             virtual_workspace_manager,
@@ -594,6 +599,26 @@ impl LayoutEngine {
                 if should_be_floating {
                     self.floating.add_active(space, wid.pid, wid);
                 } else {
+                    // todo alexmohr: cleanup
+                    // // Ensure layout exists for this workspace
+                    // if self.workspace_layouts.active(space, assigned_workspace).is_none() {
+                    //     // Layout doesn't exist yet - need to ensure it
+                    //     // Get the space size from app info or use a default
+                    //     let mut layout_ensured = false;
+                    //
+                    //     // Try to ensure the layout with a reasonable default size
+                    //     // In a real scenario, we'd get this from the display
+                    //     let default_size = objc2_core_foundation::CGSize::new(1920.0, 1080.0);
+                    //
+                    //     self.workspace_layouts.ensure_active_for_space(
+                    //         space,
+                    //         default_size,
+                    //         std::iter::once(assigned_workspace),
+                    //         &mut self.tree,
+                    //     );
+                    //     layout_ensured = true;
+                    // }
+                    //
                     if let Some(layout) = self.workspace_layouts.active(space, assigned_workspace) {
                         self.tree.add_window_after_selection(layout, wid);
                     } else {
