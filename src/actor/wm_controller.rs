@@ -71,8 +71,27 @@ pub enum WmCmd {
     CreateWorkspace,
     SwitchToLastWorkspace,
 
+    MoveWorkspaceToMonitor {
+        direction: MonitorDirectionArg,
+        #[serde(default)]
+        wrap_around: bool,
+    },
+    MoveNodeToMonitor {
+        direction: MonitorDirectionArg,
+        #[serde(default)]
+        wrap_around: bool,
+    },
+
     ShowMissionControlAll,
     ShowMissionControlCurrent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MonitorDirectionArg {
+    Left,
+    Right,
+    Next,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -441,6 +460,32 @@ impl WmController {
                 self.dismiss_mission_control();
                 self.events_tx.send(reactor::Event::Command(reactor::Command::Layout(
                     layout::LayoutCommand::SwitchToLastWorkspace,
+                )));
+            }
+            Command(Wm(MoveWorkspaceToMonitor { direction, wrap_around })) => {
+                let layout_direction = match direction {
+                    MonitorDirectionArg::Left => layout::MonitorDirection::Left,
+                    MonitorDirectionArg::Right => layout::MonitorDirection::Right,
+                    MonitorDirectionArg::Next => layout::MonitorDirection::Next,
+                };
+                self.events_tx.send(reactor::Event::Command(reactor::Command::Layout(
+                    layout::LayoutCommand::MoveWorkspaceToMonitor {
+                        direction: layout_direction,
+                        wrap_around,
+                    },
+                )));
+            }
+            Command(Wm(MoveNodeToMonitor { direction, wrap_around })) => {
+                let layout_direction = match direction {
+                    MonitorDirectionArg::Left => layout::MonitorDirection::Left,
+                    MonitorDirectionArg::Right => layout::MonitorDirection::Right,
+                    MonitorDirectionArg::Next => layout::MonitorDirection::Next,
+                };
+                self.events_tx.send(reactor::Event::Command(reactor::Command::Layout(
+                    layout::LayoutCommand::MoveNodeToMonitor {
+                        direction: layout_direction,
+                        wrap_around,
+                    },
                 )));
             }
             Command(Wm(ShowMissionControlAll)) => {

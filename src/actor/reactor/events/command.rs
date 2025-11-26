@@ -84,6 +84,14 @@ impl CommandEventHandler {
                     EventResponse::default()
                 }
             }
+            LayoutCommand::MoveWorkspaceToMonitor { direction, wrap_around } => {
+                Self::handle_move_workspace_to_monitor(reactor, *direction, *wrap_around);
+                EventResponse::default()
+            }
+            LayoutCommand::MoveNodeToMonitor { direction, wrap_around } => {
+                Self::handle_move_node_to_monitor(reactor, *direction, *wrap_around);
+                EventResponse::default()
+            }
             _ => reactor.layout_manager.layout_engine.handle_command(
                 reactor.workspace_command_space(),
                 &visible_spaces,
@@ -314,5 +322,202 @@ impl CommandEventHandler {
         } else {
             warn!("Close window command ignored because no window is tracked");
         }
+    }
+
+    fn handle_move_workspace_to_monitor(
+        reactor: &mut Reactor,
+        direction: crate::layout_engine::MonitorDirection,
+        wrap_around: bool,
+    ) {
+        use crate::layout_engine::MonitorDirection;
+
+        let Some(current_space) = reactor.workspace_command_space() else {
+            warn!("Cannot move workspace: no current space");
+            return;
+        };
+
+        let Some(current_screen) = reactor.space_manager.screen_by_space(current_space) else {
+            warn!("Cannot move workspace: no screen for current space");
+            return;
+        };
+
+        let target_screen = match direction {
+            MonitorDirection::Left => {
+                Self::find_adjacent_screen(reactor, current_screen, crate::layout_engine::Direction::Left, wrap_around)
+            }
+            MonitorDirection::Right => {
+                Self::find_adjacent_screen(reactor, current_screen, crate::layout_engine::Direction::Right, wrap_around)
+            }
+            MonitorDirection::Next => {
+                Self::find_next_screen(reactor, current_screen, wrap_around)
+            }
+        };
+
+        let Some(target_screen) = target_screen else {
+            info!("No target monitor found in direction {:?}", direction);
+            return;
+        };
+
+        let Some(target_space) = reactor.space_manager.space_for_screen(target_screen) else {
+            warn!("Target screen has no space");
+            return;
+        };
+
+        // Check if the workspace already exists on the target display
+        if target_space == current_space {
+            info!("Workspace is already on the target monitor");
+            return;
+        }
+
+        // Get all windows in the current active workspace
+        let windows_to_move = reactor
+            .layout_manager
+            .layout_engine
+            .windows_in_active_workspace(current_space);
+
+        if windows_to_move.is_empty() {
+            info!("No windows to move in current workspace");
+            return;
+        }
+
+        info!("Moving {} windows from space {:?} to {:?}", windows_to_move.len(), current_space, target_space);
+
+        // Move each window to the target space
+        for window_id in windows_to_move {
+            if let Some(window_state) = reactor.window_manager.windows.get(&window_id) {
+                if let Some(wsid) = window_state.window_server_id {
+                    if let Err(e) = window_server::move_window_to_space(wsid, target_space.get()) {
+                        warn!("Failed to move window {:?} to target space: {:?}", window_id, e);
+                    }
+                }
+            }
+        }
+
+        // Warp mouse to the target display
+        if let Some(event_tap_tx) = reactor.communication_manager.event_tap_tx.as_ref() {
+            event_tap_tx.send(crate::actor::event_tap::Request::Warp(target_screen.frame.mid()));
+        }
+    }
+
+    fn handle_move_node_to_monitor(
+        reactor: &mut Reactor,
+        direction: crate::layout_engine::MonitorDirection,
+        wrap_around: bool,
+    ) {
+        use crate::layout_engine::MonitorDirection;
+
+        let Some(current_window) = reactor.main_window() else {
+            warn!("Cannot move node: no active window");
+            return;
+        };
+
+        let Some(current_space) = reactor.workspace_command_space() else {
+            warn!("Cannot move node: no current space");
+            return;
+        };
+
+        let Some(current_screen) = reactor.space_manager.screen_by_space(current_space) else {
+            warn!("Cannot move node: no screen for current space");
+            return;
+        };
+
+        let target_screen = match direction {
+            MonitorDirection::Left => {
+                Self::find_adjacent_screen(reactor, current_screen, crate::layout_engine::Direction::Left, wrap_around)
+            }
+            MonitorDirection::Right => {
+                Self::find_adjacent_screen(reactor, current_screen, crate::layout_engine::Direction::Right, wrap_around)
+            }
+            MonitorDirection::Next => {
+                Self::find_next_screen(reactor, current_screen, wrap_around)
+            }
+        };
+
+        let Some(target_screen) = target_screen else {
+            info!("No target monitor found in direction {:?}", direction);
+            return;
+        };
+
+        let Some(target_space) = reactor.space_manager.space_for_screen(target_screen) else {
+            warn!("Target screen has no space");
+            return;
+        };
+
+        if target_space == current_space {
+            info!("Window is already on the target monitor");
+            return;
+        }
+
+        // Move the window to the target space
+        if let Some(window_state) = reactor.window_manager.windows.get(&current_window) {
+            if let Some(wsid) = window_state.window_server_id {
+                if let Err(e) = window_server::move_window_to_space(wsid, target_space.get()) {
+                    warn!("Failed to move window {:?} to target space: {:?}", current_window, e);
+                } else {
+                    info!("Moved window {:?} from space {:?} to {:?}", current_window, current_space, target_space);
+                }
+            }
+        }
+    }
+
+    fn find_adjacent_screen<'a>(
+        reactor: &'a Reactor,
+        current_screen: &Screen,
+        direction: crate::layout_engine::Direction,
+        wrap_around: bool,
+    ) -> Option<&'a Screen> {
+        reactor.screen_for_focus_direction(direction).or_else(|| {
+            if wrap_around {
+                // If wrap-around is enabled and no screen found, go to opposite end
+                let opposite_dir = direction.opposite();
+                let mut furthest: Option<&Screen> = None;
+                let origin = current_screen.frame.mid();
+
+                for screen in &reactor.space_manager.screens {
+                    if screen.screen_id == current_screen.screen_id {
+                        continue;
+                    }
+                    let center = screen.frame.mid();
+                    let delta = match opposite_dir {
+                        crate::layout_engine::Direction::Left => origin.x - center.x,
+                        crate::layout_engine::Direction::Right => center.x - origin.x,
+                        crate::layout_engine::Direction::Up => center.y - origin.y,
+                        crate::layout_engine::Direction::Down => origin.y - center.y,
+                    };
+
+                    if furthest.is_none() || delta > 0.0 {
+                        furthest = Some(screen);
+                    }
+                }
+                furthest
+            } else {
+                None
+            }
+        })
+    }
+
+    fn find_next_screen<'a>(
+        reactor: &'a Reactor,
+        current_screen: &Screen,
+        wrap_around: bool,
+    ) -> Option<&'a Screen> {
+        let screens = &reactor.space_manager.screens;
+        if screens.len() <= 1 {
+            return None;
+        }
+
+        let current_idx = screens.iter().position(|s| s.screen_id == current_screen.screen_id)?;
+        let next_idx = (current_idx + 1) % screens.len();
+
+        if next_idx == current_idx {
+            return None;
+        }
+
+        if !wrap_around && next_idx == 0 && current_idx > 0 {
+            // We wrapped around but wrap_around is false
+            return None;
+        }
+
+        screens.get(next_idx)
     }
 }

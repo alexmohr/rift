@@ -264,6 +264,12 @@ unsafe extern "C" {
         windows: *mut CFArray<CFNumber>,
     ) -> *mut CFArray<CFNumber>;
 
+    pub fn SLSMoveWindowsToManagedSpace(
+        cid: cid_t,
+        windows: *mut CFArray<CFNumber>,
+        space_id: u64,
+    ) -> CGError;
+
     pub fn SLSGetConnectionIDForPSN(
         cid: cid_t,
         psn: *const ProcessSerialNumber,

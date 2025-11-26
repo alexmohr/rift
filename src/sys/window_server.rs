@@ -738,6 +738,19 @@ pub fn make_key_window(pid: pid_t, wsid: WindowServerId) -> Result<(), CGError> 
     Ok(())
 }
 
+pub fn move_window_to_space(wsid: WindowServerId, space_id: u64) -> Result<(), CGError> {
+    let cid = unsafe { SLSMainConnectionID() };
+    let cf_windows = CFArray::from_retained_objects(&[CFNumber::new_i64(wsid.0 as i64)]);
+
+    cg_ok(unsafe {
+        SLSMoveWindowsToManagedSpace(
+            cid,
+            CFRetained::as_ptr(&cf_windows).as_ptr(),
+            space_id,
+        )
+    })
+}
+
 pub fn allow_hide_mouse() -> Result<(), CGError> {
     let cid = unsafe { SLSMainConnectionID() };
     let property = CFString::from_str("SetsCursorInBackground");

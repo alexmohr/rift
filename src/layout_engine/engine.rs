@@ -62,6 +62,23 @@ pub enum LayoutCommand {
     SwitchToLastWorkspace,
 
     SwapWindows(crate::actor::app::WindowId, crate::actor::app::WindowId),
+
+    MoveWorkspaceToMonitor {
+        direction: MonitorDirection,
+        wrap_around: bool,
+    },
+    MoveNodeToMonitor {
+        direction: MonitorDirection,
+        wrap_around: bool,
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MonitorDirection {
+    Left,
+    Right,
+    Next,
 }
 
 #[non_exhaustive]
@@ -903,7 +920,9 @@ impl LayoutEngine {
             | LayoutCommand::SwitchToWorkspace(_)
             | LayoutCommand::MoveWindowToWorkspace { .. }
             | LayoutCommand::CreateWorkspace
-            | LayoutCommand::SwitchToLastWorkspace => EventResponse::default(),
+            | LayoutCommand::SwitchToLastWorkspace
+            | LayoutCommand::MoveWorkspaceToMonitor { .. }
+            | LayoutCommand::MoveNodeToMonitor { .. } => EventResponse::default(),
             LayoutCommand::JoinWindow(direction) => {
                 self.workspace_layouts.mark_last_saved(space, workspace_id, layout);
                 self.tree.join_selection_with_direction(layout, direction);
